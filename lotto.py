@@ -1,6 +1,8 @@
 import streamlit as st
 import random
 from collections import Counter
+import pandas as pd
+from streamlit_gsheets import GSheetsConnection
 
 # =============================================================
 # [헬퍼 함수] 통계 필터 및 밸런스 검증
@@ -42,17 +44,15 @@ def generate_chain_sojeo_sets(base_games, n_value):
     selected_set = []
     used_numbers_in_set = set()
     
-    # 기반 게임 전체 번호 풀
     all_base_nums = [num for g in base_games for num in g]
     
-    # 1. 메인 게임 생성 (N개 고정수 추출)
+    # 1. 메인 게임 생성
     fixed_nums = set()
     if n_value > 0 and len(all_base_nums) >= n_value:
         counts = Counter(all_base_nums)
         most_common = [num for num, _ in counts.most_common(n_value)]
         fixed_nums = set(most_common)
     
-    # 메인 게임 (황금 밸런스 만족할 때까지 생성)
     while True:
         candidate_pool = list(set(range(1, 46)) - fixed_nums)
         needed = 6 - len(fixed_nums)
@@ -62,7 +62,7 @@ def generate_chain_sojeo_sets(base_games, n_value):
             used_numbers_in_set.update(main_game)
             break
             
-    # 2. 1차 소거 게임 (메인 게임에 사용된 번호 제외)
+    # 2. 1차 소거 게임
     while True:
         available_pool = list(set(range(1, 46)) - used_numbers_in_set)
         if len(available_pool) < 6:
@@ -73,7 +73,7 @@ def generate_chain_sojeo_sets(base_games, n_value):
             used_numbers_in_set.update(sojeo1_game)
             break
 
-    # 3. 2차 소거 게임 (1차+2차 소거에 사용된 번호 제외)
+    # 3. 2차 소거 게임
     while True:
         available_pool = list(set(range(1, 46)) - used_numbers_in_set)
         if len(available_pool) < 6:
@@ -86,12 +86,18 @@ def generate_chain_sojeo_sets(base_games, n_value):
     return selected_set
 
 # =============================================================
-# Streamlit UI 구현
+# Streamlit UI 구현 및 구글 시트 연동
 # =============================================================
 st.set_page_config(page_title="로또 황금밸런스 & 연쇄소거 번호 생성기", layout="wide")
 
 st.title("🎲 로또 황금밸런스 & 연쇄소거 분석기")
-st.caption("시작 3게임 입력 → 황금 밸런스(총합 100~170) 및 N=2,3 연쇄 소거 세트(총 9게임) 자동 도출")
+st.caption("시작 3게임 입력 → 황금 밸런스(총합 100~170) 및 N=2,3 연쇄 소거 세트(총 9게임) 자동 도출 & 구글 시트 기록")
+
+# 구글 시트 커넥션 연결
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except Exception as e:
+    conn = None
 
 st.sidebar.header("⚙️ 게임 방식 선택")
 input_mode = st.sidebar.radio("시작 3게임 설정 방식", ["직접 입력하기", "랜덤 자동 생성"])
@@ -158,7 +164,7 @@ if st.button("🚀 연쇄 소거 9게임 세트 생성하기", type="primary"):
 
         st.divider()
 
-        # 2. N=2 세트 출력 (라벨 수정)
+        # 2. N=2 세트 출력
         st.subheader("2️⃣ N=2 세트 (메인 + 1차 소거 + 2차 소거)")
         labels_n2 = ["메인 게임 (N=2)", "1차 소거 게임", "2차 소거 게임"]
         for label, game in zip(labels_n2, set_n2):
@@ -167,13 +173,61 @@ if st.button("🚀 연쇄 소거 9게임 세트 생성하기", type="primary"):
 
         st.divider()
 
-        # 3. N=3 세트 출력 (라벨 수정: N=3으로 명확히 구분)
+        # 3. N=3 세트 출력
         st.subheader("3️⃣ N=3 세트 (메인 + 1차 소거 + 2차 소거)")
         labels_n3 = ["메인 게임 (N=3)", "1차 소거 게임", "2차 소거 게임"]
         for label, game in zip(labels_n3, set_n3):
             stats = calculate_stats(game)
             st.markdown(f"**{label}:** `{game}` | 🟢 **[합계: {stats['sum']}]** | 저고 `{stats['low_high']}` | 홀짝 `{stats['odd_even']}`")
 
-        st.success("✅ 총 9개 게임 생성이 완료되었습니다!")
+        # 4. 구글 시트 자동 저장 로직
+        if conn:
+            try:
+                # 기존 데이터 읽기
+                existing_data = conn.read(ttl=0)
+                
+                # 저장할 데이터 행 생성 (총 9개 게임)
+                all_records = []
+                now_str = pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y-%m-%d %H:%M:%S")
+                
+                # 시작 3게임
+                for i, g in enumerate(base_games, 1):
+                    s = calculate_stats(g)
+                    all_records.append({
+                        "생성시간": now_str, "구분": f"시작게임 {i}",
+                        "N1": g[0], "N2": g[1], "N3": g[2], "N4": g[3], "N5": g[4], "N6": g[5],
+                        "총합": s["sum"], "저고": s["low_high"], "홀짝": s["odd_even"]
+                    })
+                # N=2 세트 3게임
+                for label, g in zip(labels_n2, set_n2):
+                    s = calculate_stats(g)
+                    all_records.append({
+                        "생성시간": now_str, "구분": f"N=2 {label}",
+                        "N1": g[0], "N2": g[1], "N3": g[2], "N4": g[3], "N5": g[4], "N6": g[5],
+                        "총합": s["sum"], "저고": s["low_high"], "홀짝": s["odd_even"]
+                    })
+                # N=3 세트 3게임
+                for label, g in zip(labels_n3, set_n3):
+                    s = calculate_stats(g)
+                    all_records.append({
+                        "생성시간": now_str, "구분": f"N=3 {label}",
+                        "N1": g[0], "N2": g[1], "N3": g[2], "N4": g[3], "N5": g[4], "N6": g[5],
+                        "총합": s["sum"], "저고": s["low_high"], "홀짝": s["odd_even"]
+                    })
+                
+                new_df = pd.DataFrame(all_records)
+                
+                # 기존 데이터와 병합 후 업데이트
+                if not existing_data.empty:
+                    updated_df = pd.concat([existing_data, new_df], ignore_index=True)
+                else:
+                    updated_df = new_df
+                    
+                conn.update(data=updated_df)
+                st.success("✅ 총 9개 게임 생성이 완료되었으며, 구글 시트에 성공적으로 저장되었습니다!")
+            except Exception as save_error:
+                st.warning(f"⚠️ 게임은 생성되었으나 구글 시트 저장 중 오류가 발생했습니다: {save_error}")
+        else:
+            st.success("✅ 총 9개 게임 생성이 완료되었습니다.")
     else:
         st.error("❌ 시작 3게임 입력이 제대로 완성되지 않았습니다. 번호를 확인해 주세요.")
