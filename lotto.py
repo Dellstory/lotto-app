@@ -100,28 +100,42 @@ base_games = []
 
 if input_mode == "직접 입력하기":
     st.subheader("📝 시작 3게임 직접 입력")
-    st.write("각 게임에 1~45 사이의 숫자 6개를 쉼표(,)로 구분해서 입력해 주세요.")
+    st.info("💡 모바일 입력 팁: 숫자를 **한 칸 띄어쓰기(공백)**로 구분해서 입력해 주세요. (예: 3 12 18 27 34 41)")
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        g1_str = st.text_input("게임 1 번호", "3, 12, 18, 27, 34, 41")
+        g1_str = st.text_input("게임 1 번호", value="", placeholder="예: 3 12 18 27 34 41")
     with col2:
-        g2_str = st.text_input("게임 2 번호", "5, 14, 22, 30, 37, 44")
+        g2_str = st.text_input("게임 2 번호", value="", placeholder="예: 5 14 22 30 37 44")
     with col3:
-        g3_str = st.text_input("게임 3 번호", "1, 8, 19, 25, 33, 40")
+        g3_str = st.text_input("게임 3 번호", value="", placeholder="예: 1 8 19 25 33 40")
         
-    # 입력값 파싱
-    try:
-        g1 = sorted([int(x.strip()) for x in g1_str.split(",") if x.strip().isdigit()])
-        g2 = sorted([int(x.strip()) for x in g2_str.split(",") if x.strip().isdigit()])
-        g3 = sorted([int(x.strip()) for x in g3_str.split(",") if x.strip().isdigit()])
-        
+    # 공백(스페이스) 및 쉼표 구분 모두 지원하는 문자열 파싱
+    def parse_input(input_str):
+        if not input_str.strip():
+            return []
+        # 쉼표가 들어간 경우 공백으로 대체 후 분할
+        cleaned = input_str.replace(",", " ")
+        tokens = cleaned.split()
+        nums = []
+        for t in tokens:
+            if t.isdigit():
+                num = int(t)
+                if 1 <= num <= 45 and num not in nums:
+                    nums.append(num)
+        return sorted(nums)
+
+    g1 = parse_input(g1_str)
+    g2 = parse_input(g2_str)
+    g3 = parse_input(g3_str)
+
+    # 입력 안내 및 검증 메세지
+    if g1_str or g2_str or g3_str:
         if len(g1) == 6 and len(g2) == 6 and len(g3) == 6:
             base_games = [g1, g2, g3]
+            st.success("✅ 3개 게임의 입력이 정상적으로 확인되었습니다.")
         else:
-            st.warning("⚠️ 각 게임마다 정확히 6개의 숫자를 입력해야 알고리즘이 가동됩니다.")
-    except:
-        st.error("❌ 숫자를 쉼표(,)로 구분해서 바르게 입력해 주세요.")
+            st.warning("⚠️ 각 입력 칸마다 1~45 사이의 서로 다른 숫자 6개를 띄어쓰기로 입력해 주세요.")
 
 else:
     st.subheader("🎲 황금 밸런스 자동 뽑기 3게임")
@@ -163,3 +177,5 @@ if st.button("🚀 연쇄 소거 9게임 세트 생성하기", type="primary"):
             st.markdown(f"**{label}:** `{game}` | 🟢 **[합계: {stats['sum']}]** | 저고 `{stats['low_high']}` | 홀짝 `{stats['odd_even']}`")
 
         st.success("✅ 총 9개 게임 생성이 완료되었습니다!")
+    else:
+        st.error("❌ 시작 3게임 입력이 제대로 완성되지 않았습니다. 번호를 확인해 주세요.")
