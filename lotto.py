@@ -13,10 +13,13 @@ st.title("🎲 로또 번호 맞춤 조합기")
 # Google Sheets 연결 초기화
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-st.subheader("1. 기존 구매 게임 입력")
+st.subheader("1. 기존 구매 게임 입력 (최대 5게임)")
+st.caption("※ 최소 1게임 이상 입력. 입력하지 않은 칸은 자동으로 제외됩니다.")
 game1_str = st.text_input("게임 1 (예: 3 12 18 25 33 41)", key="g1")
 game2_str = st.text_input("게임 2", key="g2")
 game3_str = st.text_input("게임 3", key="g3")
+game4_str = st.text_input("게임 4 (선택)", key="g4")
+game5_str = st.text_input("게임 5 (선택)", key="g5")
 
 st.markdown("---")
 st.subheader("2. 추가 커스텀 생성 옵션 (선택)")
@@ -27,7 +30,8 @@ with col2:
     custom_m = st.number_input("추가 생성 M (생성할 게임 수)", min_value=0, max_value=20, value=1)
 
 if st.button("✨ 기본 4개 세트 + 추가 조합 생성하기", type="primary", use_container_width=True):
-    raw_inputs = [game1_str, game2_str, game3_str]
+    # 입력 필드 5개를 모두 가져옵니다.
+    raw_inputs = [game1_str, game2_str, game3_str, game4_str, game5_str]
     input_games = []
     
     for idx, raw in enumerate(raw_inputs):
@@ -39,7 +43,7 @@ if st.button("✨ 기본 4개 세트 + 추가 조합 생성하기", type="primar
                     st.stop()
                 input_games.append(sorted(nums))
             except ValueError:
-                st.error("숫자 형식으로 입력해주세요.")
+                st.error(f"게임 {idx+1}: 숫자 형식으로 입력해주세요.")
                 st.stop()
 
     if not input_games:
@@ -78,6 +82,8 @@ if st.button("✨ 기본 4개 세트 + 추가 조합 생성하기", type="primar
             "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
             "입력_게임2": " ".join(map(str, input_games[1])) if len(input_games) > 1 else "",
             "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
+            "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
+            "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
             "생성_게임": f"기본 N={n}",
             "선택된_N개": user_num_str,
             "상세내용": " ".join(map(str, final_game))
@@ -93,7 +99,6 @@ if st.button("✨ 기본 4개 세트 + 추가 조합 생성하기", type="primar
         if custom_n > len(unique_user_nums):
             st.error(f"입력된 유일 숫자가 {len(unique_user_nums)}개입니다. 추가 생성 N을 {len(unique_user_nums)} 이하로 설정해주세요.")
         else:
-            # 커스텀 M개 게임 전체에 고정 적용할 N개 추출
             fixed_user = sorted(random.sample(unique_user_nums, custom_n)) if custom_n > 0 else []
             fixed_user_str = " ".join(map(str, fixed_user)) if fixed_user else "없음"
             
@@ -112,6 +117,8 @@ if st.button("✨ 기본 4개 세트 + 추가 조합 생성하기", type="primar
                     "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
                     "입력_게임2": " ".join(map(str, input_games[1])) if len(input_games) > 1 else "",
                     "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
+                    "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
+                    "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
                     "생성_게임": f"추가 {idx:02d} (N={custom_n})",
                     "선택된_N개": fixed_user_str,
                     "상세내용": " ".join(map(str, final_game))
