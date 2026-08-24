@@ -4,8 +4,17 @@ import pandas as pd
 import os
 from datetime import datetime
 
-# 페이지 기본 설정 (모바일 화면에 최적화)
+# 자동 번역 충돌 방지 설정 추가
+st.markdown("""
+    <style>
+        html { translate: no; }
+    </style>
+""", unsafe_allow_html=True)
+
+# 페이지 기본 설정
 st.set_page_config(page_title="로또 번호 맞춤 조합기", page_icon="🎲", layout="centered")
+
+# ... (이하 기존 코드 동일)
 
 st.title("🎲 로또 번호 맞춤 조합기")
 st.write("구매한 게임 번호를 입력하고 맞춤 조합을 생성해보세요.")
