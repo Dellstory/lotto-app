@@ -110,11 +110,9 @@ if input_mode == "직접 입력하기":
     with col3:
         g3_str = st.text_input("게임 3 번호", value="", placeholder="예: 1 8 19 25 33 40")
         
-    # 공백(스페이스) 및 쉼표 구분 모두 지원하는 문자열 파싱
     def parse_input(input_str):
         if not input_str.strip():
             return []
-        # 쉼표가 들어간 경우 공백으로 대체 후 분할
         cleaned = input_str.replace(",", " ")
         tokens = cleaned.split()
         nums = []
@@ -129,7 +127,6 @@ if input_mode == "직접 입력하기":
     g2 = parse_input(g2_str)
     g3 = parse_input(g3_str)
 
-    # 입력 안내 및 검증 메세지
     if g1_str or g2_str or g3_str:
         if len(g1) == 6 and len(g2) == 6 and len(g3) == 6:
             base_games = [g1, g2, g3]
@@ -161,18 +158,19 @@ if st.button("🚀 연쇄 소거 9게임 세트 생성하기", type="primary"):
 
         st.divider()
 
-        # 2. N=2 세트 출력
+        # 2. N=2 세트 출력 (라벨 수정)
         st.subheader("2️⃣ N=2 세트 (메인 + 1차 소거 + 2차 소거)")
-        labels = ["메인 게임 (N=2)", "1차 소거 게임", "2차 소거 게임"]
-        for label, game in zip(labels, set_n2):
+        labels_n2 = ["메인 게임 (N=2)", "1차 소거 게임", "2차 소거 게임"]
+        for label, game in zip(labels_n2, set_n2):
             stats = calculate_stats(game)
             st.markdown(f"**{label}:** `{game}` | 🟢 **[합계: {stats['sum']}]** | 저고 `{stats['low_high']}` | 홀짝 `{stats['odd_even']}`")
 
         st.divider()
 
-        # 3. N=3 세트 출력
+        # 3. N=3 세트 출력 (라벨 수정: N=3으로 명확히 구분)
         st.subheader("3️⃣ N=3 세트 (메인 + 1차 소거 + 2차 소거)")
-        for label, game in zip(labels, set_n3):
+        labels_n3 = ["메인 게임 (N=3)", "1차 소거 게임", "2차 소거 게임"]
+        for label, game in zip(labels_n3, set_n3):
             stats = calculate_stats(game)
             st.markdown(f"**{label}:** `{game}` | 🟢 **[합계: {stats['sum']}]** | 저고 `{stats['low_high']}` | 홀짝 `{stats['odd_even']}`")
 
