@@ -1,205 +1,134 @@
 import streamlit as st
 import random
-import pandas as pd
-from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 
-# 자동 번역 충돌 방지 설정
-st.markdown("<style>html { translate: no; }</style>", unsafe_allow_html=True)
-st.set_page_config(page_title="로또 번호 맞춤 조합기", page_icon="🎲", layout="centered")
-
-st.title("🎲 로또 번호 맞춤 조합기")
-
-# Google Sheets 연결 초기화
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-st.subheader("1. 기존 구매 게임 입력 (최대 5게임)")
-st.caption("※ 최소 1게임 이상 입력. 입력하지 않은 칸은 자동으로 제외됩니다.")
-game1_str = st.text_input("게임 1 (예: 3 12 18 25 33 41)", key="g1")
-game2_str = st.text_input("게임 2", key="g2")
-game3_str = st.text_input("게임 3", key="g3")
-game4_str = st.text_input("게임 4 (선택)", key="g4")
-game5_str = st.text_input("게임 5 (선택)", key="g5")
-
-st.markdown("---")
-st.subheader("2. 추가 커스텀 생성 옵션 (선택)")
-col1, col2 = st.columns(2)
-with col1:
-    custom_n = st.number_input("추가 생성 N (선택할 고정 개수)", min_value=0, max_value=6, value=2)
-with col2:
-    custom_m = st.number_input("추가 생성 M (생성할 게임 수)", min_value=0, max_value=20, value=0)
-
-if st.button("✨ 연쇄 소거 세트 + 추가 조합 생성하기", type="primary", use_container_width=True):
-    raw_inputs = [game1_str, game2_str, game3_str, game4_str, game5_str]
-    input_games = []
+# ================= ============================================
+# [헬퍼 함수] 통계 필터 및 밸런스 검증
+# ================= ============================================
+def calculate_stats(numbers):
+    """6개 번호의 총합, 고저 비율, 홀짝 비율 및 황금 밸런스 여부를 반환"""
+    total_sum = sum(numbers)
+    low_count = sum(1 for x in numbers if x <= 22)   # 저번호(1~22)
+    high_count = 6 - low_count                       # 고번호(23~45)
+    odd_count = sum(1 for x in numbers if x % 2 != 0) # 홀수
+    even_count = 6 - odd_count                       # 짝수
     
-    for idx, raw in enumerate(raw_inputs):
-        if raw.strip():
-            try:
-                nums = list(map(int, raw.strip().split()))
-                if len(nums) != 6 or not all(1 <= x <= 45 for x in nums) or len(set(nums)) != 6:
-                    st.error(f"게임 {idx+1}: 올바른 6개 숫자를 입력해주세요.")
-                    st.stop()
-                input_games.append(sorted(nums))
-            except ValueError:
-                st.error(f"게임 {idx+1}: 숫자 형식으로 입력해주세요.")
-                st.stop()
-
-    if not input_games:
-        st.warning("최소 1개 이상의 게임을 입력하셔야 합니다.")
-        st.stop()
-
-    all_user_nums = [num for game in input_games for num in game]
-    unique_user_nums = sorted(list(set(all_user_nums)))
-    unselected_nums = sorted(list(set(range(1, 46)) - set(unique_user_nums)))
-
-    generated_rows = []  # 구글 시트에 저장할 데이터
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # ---------------------------------------------------------
-    # [파트 1] 기본 세트 (N=0~3 및 각 하위 연쇄 소거 게임 1-2, 1-3)
-    # ---------------------------------------------------------
-    st.subheader("🎯 [기본 세트] N=0~3 분산 + 연쇄 소거 조합")
+    # 황금 구간 조건: 총합 100~170 AND 고저 비율 2:4 ~ 4:2
+    is_balanced = (100 <= total_sum <= 170) and (2 <= low_count <= 4)
     
-    for n in range(4):
-        if n > len(unique_user_nums):
-            st.warning(f"N={n} 세트: 입력된 유일 숫자가 {len(unique_user_nums)}개뿐이어서 생성할 수 없습니다.")
-            continue
+    return {
+        "sum": total_sum,
+        "low_high": f"{low_count}:{high_count}",
+        "odd_even": f"{odd_count}:{even_count}",
+        "is_balanced": is_balanced
+    }
 
-        base_game_num = n + 1
-        
-        # --- 1단계: 기본 메인 게임 (N개 선택 조합) ---
-        picked_user = sorted(random.sample(unique_user_nums, n)) if n > 0 else []
-        picked_unselected = sorted(random.sample(unselected_nums, 6 - n))
-        game1 = sorted(picked_user + picked_unselected)
-        user_num_str = " ".join(map(str, picked_user)) if picked_user else "없음"
-        
-        st.success(f"**기본 {base_game_num} (N={n}):** {game1}  *(선택된 번호: {user_num_str})*")
-        
-        generated_rows.append({
-            "시각": now_str,
-            "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
-            "입력_게임2": " ".join(map(str, input_games[1])) if len(input_games) > 1 else "",
-            "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
-            "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
-            "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
-            "생성_게임": f"기본 {base_game_num} (N={n})",
-            "선택된_N개": user_num_str,
-            "상세내용": " ".join(map(str, game1))
-        })
+def generate_balanced_random_game():
+    """총합 100~170 및 고저 균형(2:4~4:2)을 만족하는 랜덤 1게임 생성"""
+    while True:
+        game = sorted(random.sample(range(1, 46), 6))
+        stats = calculate_stats(game)
+        if stats["is_balanced"]:
+            return game
 
-        # --- 2단계: 1차 연쇄 소거 (game1 제외 후 39개 중 6개 무작위) ---
-        pool_after_1 = list(set(range(1, 46)) - set(game1))
-        game1_2 = sorted(random.sample(pool_after_1, 6))
-        
-        st.info(f"└ ── **기본 {base_game_num}-2 (1차 소거):** {game1_2}  *(제외수: {game1})*")
-        
-        generated_rows.append({
-            "시각": now_str,
-            "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
-            "입력_게임2": " ".join(map(str, input_games[1])) if len(input_games) > 1 else "",
-            "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
-            "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
-            "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
-            "생성_게임": f"기본 {base_game_num}-2",
-            "선택된_N개": "1차 소거",
-            "상세내용": " ".join(map(str, game1_2))
-        })
+# ================= ============================================
+# [핵심 로직] N값 세트 & 연쇄 소거 세트 생성
+# ================= ============================================
+def generate_chain_sojeo_sets(base_games, n_value):
+    """
+    기존 베이스 게임들로부터 고정수(N개)를 확보하고, 
+    남은 번호에서 1차/2차 연쇄 소거를 적용하여 균형 잡힌 3게임 세트를 생성
+    """
+    selected_set = []
+    used_numbers_in_set = set()
+    
+    # 1. 메인 게임 생성 (N개 고정수 추출)
+    # 기존 게임들에서 자주 겹치는 번호 또는 무작위 추출로 N개 고정수 확보
+    all_base_nums = [num for g in base_games for num in g]
+    # 고정수 추출
+    fixed_nums = set()
+    if n_value > 0 and len(all_base_nums) >= n_value:
+        # 빈도수 기준 상위 N개 추출
+        from collections import Counter
+        counts = Counter(all_base_nums)
+        most_common = [num for num, _ in counts.most_common(n_value)]
+        fixed_nums = set(most_common)
+    
+    # 메인 게임 완성 (황금 밸런스 만족할 때까지 생성)
+    while True:
+        candidate_pool = list(set(range(1, 46)) - fixed_nums)
+        needed = 6 - len(fixed_nums)
+        main_game = sorted(list(fixed_nums) + random.sample(candidate_pool, needed))
+        if calculate_stats(main_game)["is_balanced"]:
+            selected_set.append(main_game)
+            used_numbers_in_set.update(main_game)
+            break
+            
+    # 2. 1차 소거 게임 (메인 게임에 사용된 번호 제외 후 생성)
+    while True:
+        available_pool = list(set(range(1, 46)) - used_numbers_in_set)
+        if len(available_pool) < 6:
+            available_pool = list(set(range(1, 46))) # 풀이 부족할 경우 전체로 리셋
+        sojeo1_game = sorted(random.sample(available_pool, 6))
+        if calculate_stats(sojeo1_game)["is_balanced"]:
+            selected_set.append(sojeo1_game)
+            used_numbers_in_set.update(sojeo1_game)
+            break
 
-        # --- 3단계: 2차 연쇄 소거 (game1, game1_2 제외 후 33개 중 6개 무작위) ---
-        pool_after_2 = list(set(pool_after_1) - set(game1_2))
-        game1_3 = sorted(random.sample(pool_after_2, 6))
-        
-        st.info(f"└ ── **기본 {base_game_num}-3 (2차 소거):** {game1_3}  *(제외수 총 12개)*")
-        st.write("")  # 간격 조절용
-        
-        generated_rows.append({
-            "시각": now_str,
-            "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
-            "입력_게임2": " ".join(map(str, input_games[1])) if len(input_games) > 1 else "",
-            "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
-            "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
-            "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
-            "생성_게임": f"기본 {base_game_num}-3",
-            "선택된_N개": "2차 소거",
-            "상세내용": " ".join(map(str, game1_3))
-        })
+    # 3. 2차 소거 게임 (1차+2차에 사용된 번호 제외 후 생성)
+    while True:
+        available_pool = list(set(range(1, 46)) - used_numbers_in_set)
+        if len(available_pool) < 6:
+            available_pool = list(set(range(1, 46))) # 풀이 부족할 경우 전체로 리셋
+        sojeo2_game = sorted(random.sample(available_pool, 6))
+        if calculate_stats(sojeo2_game)["is_balanced"]:
+            selected_set.append(sojeo2_game)
+            break
 
-    # ---------------------------------------------------------
-    # [파트 2] 추가 커스텀 생성 (N, M 설정 반영 + 연쇄 소거 적용)
-    # ---------------------------------------------------------
-    if custom_m > 0:
-        st.markdown("---")
-        st.subheader(f"⚙️ [추가 생성] N={custom_n} 고정 연쇄 소거 조합 ({custom_m}세트)")
-        
-        if custom_n > len(unique_user_nums):
-            st.error(f"입력된 유일 숫자가 {len(unique_user_nums)}개입니다. 추가 생성 N을 {len(unique_user_nums)} 이하로 설정해주세요.")
-        else:
-            for idx in range(1, custom_m + 1):
-                # --- 1단계: 커스텀 메인 게임 ---
-                fixed_user = sorted(random.sample(unique_user_nums, custom_n)) if custom_n > 0 else []
-                fixed_user_str = " ".join(map(str, fixed_user)) if fixed_user else "없음"
-                picked_unselected = sorted(random.sample(unselected_nums, 6 - custom_n))
-                custom_game1 = sorted(fixed_user + picked_unselected)
-                
-                st.success(f"**추가 {idx:02d} (N={custom_n}):** {custom_game1}  *(선택된 번호: {fixed_user_str})*")
-                
-                generated_rows.append({
-                    "시각": now_str,
-                    "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
-                    "입력_게임2": " ".join(map(str, input_games[1])) if len(input_games) > 1 else "",
-                    "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
-                    "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
-                    "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
-                    "생성_게임": f"추가 {idx:02d} (N={custom_n})",
-                    "선택된_N개": fixed_user_str,
-                    "상세내용": " ".join(map(str, custom_game1))
-                })
+    return selected_set
 
-                # --- 2단계: 1차 연쇄 소거 (custom_game1 제외 후 39개 중 6개 무작위) ---
-                c_pool_after_1 = list(set(range(1, 46)) - set(custom_game1))
-                custom_game1_2 = sorted(random.sample(c_pool_after_1, 6))
-                
-                st.info(f"└ ── **추가 {idx:02d}-2 (1차 소거):** {custom_game1_2}  *(제외수: {custom_game1})*")
-                
-                generated_rows.append({
-                    "시각": now_str,
-                    "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
-                    "입력_게임2": " ".join(map(str, input_games[1])) if len(input_games) > 1 else "",
-                    "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
-                    "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
-                    "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
-                    "생성_게임": f"추가 {idx:02d}-2",
-                    "선택된_N개": "1차 소거",
-                    "상세내용": " ".join(map(str, custom_game1_2))
-                })
+# ================= ============================================
+# Streamlit UI 구현
+# ================= ============================================
+st.set_page_config(page_title="로또 황금밸런스 & 연쇄소거 번호 생성기", layout="wide")
 
-                # --- 3단계: 2차 연쇄 소거 (custom_game1, custom_game1_2 제외 후 33개 중 6개 무작위) ---
-                c_pool_after_2 = list(set(c_pool_after_1) - set(custom_game1_2))
-                custom_game1_3 = sorted(random.sample(c_pool_after_2, 6))
-                
-                st.info(f"└ ── **추가 {idx:02d}-3 (2차 소거):** {custom_game1_3}  *(제외수 총 12개)*")
-                st.write("")  # 간격 조절용
-                
-                generated_rows.append({
-                    "시각": now_str,
-                    "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
-                    "입력_게임2": " ".join(map(str, input_games[1])) if len(input_games) > 1 else "",
-                    "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
-                    "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
-                    "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
-                    "생성_게임": f"추가 {idx:02d}-3",
-                    "선택된_N개": "2차 소거",
-                    "상세내용": " ".join(map(str, custom_game1_3))
-                })
+st.title("🎲 로또 황금밸런스 & 연쇄소거 생성기")
+st.caption("총합 100~170 & 고저 균형 필터가 적용된 9,000원(9게임) 최적화 전략")
 
-    # ---------------------------------------------------------
-    # [파트 3] Google Sheets 데이터 저장
-    # ---------------------------------------------------------
-    try:
-        existing_data = conn.read(ttl=0)
-        updated_df = pd.concat([pd.DataFrame(existing_data), pd.DataFrame(generated_rows)], ignore_index=True)
-        conn.update(data=updated_df)
-        st.toast("🟢 모든 연쇄 소거 생성 데이터가 구글 시트에 저장되었습니다!", icon="✅")
-    except Exception as e:
-        st.error(f"구글 시트 저장 중 오류 발생: {e}")
+st.sidebar.header("⚙️ 전략 설정")
+st.sidebar.markdown("""
+* **랜덤 시작 게임:** 3게임 (3,000원)
+* **N=2 소거 세트:** 3게임 (3,000원)
+* **N=3 소거 세트:** 3게임 (3,000원)
+---
+**총 9게임 (9,000원)**
+""")
+
+if st.button("🚀 9게임 생성하기", type="primary"):
+    # 1. 초기 황금 밸런스 랜덤 3게임 생성
+    random_3_games = [generate_balanced_random_game() for _ in range(3)]
+    
+    # 2. N=2 및 N=3 연쇄 소거 세트 생성
+    set_n2 = generate_chain_sojeo_sets(random_3_games, n_value=2)
+    set_n3 = generate_chain_sojeo_sets(random_3_games, n_value=3)
+
+    st.subheader("1️⃣ 시작 게임 (황금 밸런스 랜덤 3게임)")
+    for i, game in enumerate(random_3_games, 1):
+        stats = calculate_stats(game)
+        st.markdown(f"**게임 {i}:** `{game}` | 🟢 **[합계: {stats['sum']}]** | 저고 `{stats['low_high']}` | 홀짝 `{stats['odd_even']}`")
+
+    st.divider()
+
+    st.subheader("2️⃣ N=2 세트 (메인 + 1차 소거 + 2차 소거)")
+    labels = ["메인 게임 (N=2)", "1차 소거 게임", "2차 소거 게임"]
+    for label, game in zip(labels, set_n2):
+        stats = calculate_stats(game)
+        st.markdown(f"**{label}:** `{game}` | 🟢 **[합계: {stats['sum']}]** | 저고 `{stats['low_high']}` | 홀짝 `{stats['odd_even']}`")
+
+    st.divider()
+
+    st.subheader("3️⃣ N=3 세트 (메인 + 1차 소거 + 2차 소거)")
+    for label, game in zip(labels, set_n3):
+        stats = calculate_stats(game)
+        st.markdown(f"**{label}:** `{game}` | 🟢 **[합계: {stats['sum']}]** | 저고 `{stats['low_high']}` | 홀짝 `{stats['odd_even']}`")
+
+    st.success("✅ 총 9개 게임이 모두 '황금 구간(총합 100~170 & 고저 균형)' 조건을 검증받아 성공적으로 생성되었습니다!")
