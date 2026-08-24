@@ -27,10 +27,9 @@ col1, col2 = st.columns(2)
 with col1:
     custom_n = st.number_input("추가 생성 N (선택할 고정 개수)", min_value=0, max_value=6, value=2)
 with col2:
-    custom_m = st.number_input("추가 생성 M (생성할 게임 수)", min_value=0, max_value=20, value=1)
+    custom_m = st.number_input("추가 생성 M (생성할 게임 수)", min_value=0, max_value=20, value=0)
 
-if st.button("✨ 기본 4개 세트 + 추가 조합 생성하기", type="primary", use_container_width=True):
-    # 입력 필드 5개를 모두 가져옵니다.
+if st.button("✨ 연쇄 소거 세트 + 추가 조합 생성하기", type="primary", use_container_width=True):
     raw_inputs = [game1_str, game2_str, game3_str, game4_str, game5_str]
     input_games = []
     
@@ -58,25 +57,25 @@ if st.button("✨ 기본 4개 세트 + 추가 조합 생성하기", type="primar
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # ---------------------------------------------------------
-    # [파트 1] 기본 세트 4게임 (N=0, 1, 2, 3 각 1개씩)
+    # [파트 1] 기본 세트 (N=0~3 및 각 하위 연쇄 소거 게임 1-2, 1-3)
     # ---------------------------------------------------------
-    st.subheader("🎯 [기본 세트] N=0, 1, 2, 3 분산 조합 (4게임)")
+    st.subheader("🎯 [기본 세트] N=0~3 분산 + 연쇄 소거 조합")
     
     for n in range(4):
         if n > len(unique_user_nums):
             st.warning(f"N={n} 세트: 입력된 유일 숫자가 {len(unique_user_nums)}개뿐이어서 생성할 수 없습니다.")
             continue
 
+        base_game_num = n + 1
+        
+        # --- 1단계: 기본 메인 게임 (N개 선택 조합) ---
         picked_user = sorted(random.sample(unique_user_nums, n)) if n > 0 else []
         picked_unselected = sorted(random.sample(unselected_nums, 6 - n))
-        final_game = sorted(picked_user + picked_unselected)
-        
+        game1 = sorted(picked_user + picked_unselected)
         user_num_str = " ".join(map(str, picked_user)) if picked_user else "없음"
         
-        # 화면 출력
-        st.success(f"**기본 {n+1} (N={n}):** {final_game}  *(선택된 번호: {user_num_str})*")
+        st.success(f"**기본 {base_game_num} (N={n}):** {game1}  *(선택된 번호: {user_num_str})*")
         
-        # 저장용 로우 생성
         generated_rows.append({
             "시각": now_str,
             "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
@@ -84,9 +83,46 @@ if st.button("✨ 기본 4개 세트 + 추가 조합 생성하기", type="primar
             "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
             "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
             "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
-            "생성_게임": f"기본 N={n}",
+            "생성_게임": f"기본 {base_game_num} (N={n})",
             "선택된_N개": user_num_str,
-            "상세내용": " ".join(map(str, final_game))
+            "상세내용": " ".join(map(str, game1))
+        })
+
+        # --- 2단계: 1차 연쇄 소거 (game1 제외 후 39개 중 6개 무작위) ---
+        pool_after_1 = list(set(range(1, 46)) - set(game1))
+        game1_2 = sorted(random.sample(pool_after_1, 6))
+        
+        st.info(f"└ ── **기본 {base_game_num}-2 (1차 소거):** {game1_2}  *(제외수: {game1})*")
+        
+        generated_rows.append({
+            "시각": now_str,
+            "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
+            "입력_게임2": " ".join(map(str, input_games[1])) if len(input_games) > 1 else "",
+            "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
+            "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
+            "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
+            "생성_게임": f"기본 {base_game_num}-2",
+            "선택된_N개": "1차 소거",
+            "상세내용": " ".join(map(str, game1_2))
+        })
+
+        # --- 3단계: 2차 연쇄 소거 (game1, game1_2 제외 후 33개 중 6개 무작위) ---
+        pool_after_2 = list(set(pool_after_1) - set(game1_2))
+        game1_3 = sorted(random.sample(pool_after_2, 6))
+        
+        st.info(f"└ ── **기본 {base_game_num}-3 (2차 소거):** {game1_3}  *(제외수 총 12개)*")
+        st.write("")  # 간격 조절용
+        
+        generated_rows.append({
+            "시각": now_str,
+            "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
+            "입력_게임2": " ".join(map(str, input_games[1])) if len(input_games) > 1 else "",
+            "입력_게임3": " ".join(map(str, input_games[2])) if len(input_games) > 2 else "",
+            "입력_게임4": " ".join(map(str, input_games[3])) if len(input_games) > 3 else "",
+            "입력_게임5": " ".join(map(str, input_games[4])) if len(input_games) > 4 else "",
+            "생성_게임": f"기본 {base_game_num}-3",
+            "선택된_N개": "2차 소거",
+            "상세내용": " ".join(map(str, game1_3))
         })
 
     # ---------------------------------------------------------
@@ -108,10 +144,8 @@ if st.button("✨ 기본 4개 세트 + 추가 조합 생성하기", type="primar
                 picked_unselected = sorted(random.sample(unselected_nums, 6 - custom_n))
                 final_game = sorted(fixed_user + picked_unselected)
                 
-                # 화면 출력
                 st.success(f"**추가 게임 {idx:02d}:** {final_game}")
                 
-                # 저장용 로우 생성
                 generated_rows.append({
                     "시각": now_str,
                     "입력_게임1": " ".join(map(str, input_games[0])) if len(input_games) > 0 else "",
@@ -131,6 +165,6 @@ if st.button("✨ 기본 4개 세트 + 추가 조합 생성하기", type="primar
         existing_data = conn.read(ttl=0)
         updated_df = pd.concat([pd.DataFrame(existing_data), pd.DataFrame(generated_rows)], ignore_index=True)
         conn.update(data=updated_df)
-        st.toast("🟢 모든 생성 데이터가 구글 시트에 성공적으로 저장되었습니다!", icon="✅")
+        st.toast("🟢 모든 연쇄 소거 생성 데이터가 구글 시트에 저장되었습니다!", icon="✅")
     except Exception as e:
         st.error(f"구글 시트 저장 중 오류 발생: {e}")
