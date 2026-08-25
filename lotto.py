@@ -91,7 +91,7 @@ def generate_chain_sojeo_sets(base_games, n_value):
 st.set_page_config(page_title="로또 황금밸런스 & 연쇄소거 번호 생성기", layout="wide")
 
 st.title("🎲 로또 황금밸런스 & 연쇄소거 분석기")
-st.caption("시작 3게임 입력 → 황금 밸런스(총합 100~170) 및 N=2,3 연쇄 소거 세트(총 9게임) 자동 도출 & 구글 시트 기록")
+st.caption("시작 게임 입력(1~3개) → 부족한 게임 자동보충 후 N=2,3 연쇄 소거 세트(총 9게임) 자동 도출 & 구글 시트 기록")
 
 # 구글 시트 커넥션 연결
 try:
@@ -102,19 +102,19 @@ except Exception as e:
 st.sidebar.header("⚙️ 게임 방식 선택")
 input_mode = st.sidebar.radio("시작 3게임 설정 방식", ["직접 입력하기", "랜덤 자동 생성"])
 
-base_games = []
+user_entered_games = []
 
 if input_mode == "직접 입력하기":
-    st.subheader("📝 시작 3게임 직접 입력")
-    st.info("💡 모바일 입력 팁: 숫자를 **한 칸 띄어쓰기(공백)**로 구분해서 입력해 주세요. (예: 3 12 18 27 34 41)")
+    st.subheader("📝 시작 게임 직접 입력 (1~3개 선택 가능)")
+    st.info("💡 1개나 2개만 입력하셔도 됩니다! 입력하지 않은 빈 칸은 황금 밸런스 자동 게임으로 채워집니다.")
     
     col1, col2, col3 = st.columns(3)
     with col1:
         g1_str = st.text_input("게임 1 번호", value="", placeholder="예: 3 12 18 27 34 41")
     with col2:
-        g2_str = st.text_input("게임 2 번호", value="", placeholder="예: 5 14 22 30 37 44")
+        g2_str = st.text_input("게임 2 번호 (선택)", value="", placeholder="예: 5 14 22 30 37 44")
     with col3:
-        g3_str = st.text_input("게임 3 번호", value="", placeholder="예: 1 8 19 25 33 40")
+        g3_str = st.text_input("게임 3 번호 (선택)", value="", placeholder="예: 1 8 19 25 33 40")
         
     def parse_input(input_str):
         if not input_str.strip():
@@ -133,12 +133,17 @@ if input_mode == "직접 입력하기":
     g2 = parse_input(g2_str)
     g3 = parse_input(g3_str)
 
+    # 각각 6개 번호가 올바르게 입력된 것만 수집
+    for g in [g1, g2, g3]:
+        if len(g) == 6:
+            user_entered_games.append(g)
+
+    # 사용자 입력 상태 안내
     if g1_str or g2_str or g3_str:
-        if len(g1) == 6 and len(g2) == 6 and len(g3) == 6:
-            base_games = [g1, g2, g3]
-            st.success("✅ 3개 게임의 입력이 정상적으로 확인되었습니다.")
+        if len(user_entered_games) > 0:
+            st.success(f"✅ {len(user_entered_games)}개 게임 입력 확인 완료! (부족한 {3 - len(user_entered_games)}개는 자동 보충됩니다)")
         else:
-            st.warning("⚠️ 각 입력 칸마다 1~45 사이의 서로 다른 숫자 6개를 띄어쓰기로 입력해 주세요.")
+            st.warning("⚠️ 각 입력 칸마다 1~45 사이의 서로 다른 숫자 6개를 정확히 입력해 주세요.")
 
 else:
     st.subheader("🎲 황금 밸런스 자동 뽑기 3게임")
@@ -147,9 +152,19 @@ else:
 st.divider()
 
 if st.button("🚀 연쇄 소거 9게임 세트 생성하기", type="primary"):
+    base_games = []
+    
     if input_mode == "랜덤 자동 생성":
         base_games = [generate_balanced_random_game() for _ in range(3)]
-        
+    else:
+        if len(user_entered_games) > 0:
+            # 직접 입력한 게임 수용 + 부족한 개수(3 - N)만큼 황금 밸런스 랜덤 게임 자동 추가
+            base_games = list(user_entered_games)
+            while len(base_games) < 3:
+                base_games.append(generate_balanced_random_game())
+        else:
+            st.error("❌ 입력된 번호가 없습니다. 최소 1개 게임 이상 번호 6개를 제대로 입력해 주세요.")
+
     if len(base_games) == 3:
         # N=2 및 N=3 연쇄 소거 세트 생성
         set_n2 = generate_chain_sojeo_sets(base_games, n_value=2)
@@ -160,7 +175,16 @@ if st.button("🚀 연쇄 소거 9게임 세트 생성하기", type="primary"):
         for i, game in enumerate(base_games, 1):
             stats = calculate_stats(game)
             badge = "🟢 황금구간" if stats["is_balanced"] else "🟡 일반구간"
-            st.markdown(f"**게임 {i}:** `{game}` | **[합계: {stats['sum']}]** ({badge}) | 저고 `{stats['low_high']}` | 홀짝 `{stats['odd_even']}`")
+            
+            # 직접 입력 / 자동 보충 구분 표시
+            if input_mode == "직접 입력하기" and i <= len(user_entered_games):
+                tag = " (수동입력)"
+            elif input_mode == "직접 입력하기":
+                tag = " (자동보충)"
+            else:
+                tag = ""
+                
+            st.markdown(f"**게임 {i}{tag}:** `{game}` | **[합계: {stats['sum']}]** ({badge}) | 저고 `{stats['low_high']}` | 홀짝 `{stats['odd_even']}`")
 
         st.divider()
 
@@ -183,10 +207,8 @@ if st.button("🚀 연쇄 소거 9게임 세트 생성하기", type="primary"):
         # 4. 구글 시트 자동 저장 로직
         if conn:
             try:
-                # 기존 데이터 읽기
                 existing_data = conn.read(ttl=0)
                 
-                # 저장할 데이터 행 생성 (총 9개 게임)
                 all_records = []
                 now_str = pd.Timestamp.now(tz="Asia/Seoul").strftime("%Y-%m-%d %H:%M:%S")
                 
@@ -217,7 +239,6 @@ if st.button("🚀 연쇄 소거 9게임 세트 생성하기", type="primary"):
                 
                 new_df = pd.DataFrame(all_records)
                 
-                # 기존 데이터와 병합 후 업데이트
                 if not existing_data.empty:
                     updated_df = pd.concat([existing_data, new_df], ignore_index=True)
                 else:
@@ -229,5 +250,3 @@ if st.button("🚀 연쇄 소거 9게임 세트 생성하기", type="primary"):
                 st.warning(f"⚠️ 게임은 생성되었으나 구글 시트 저장 중 오류가 발생했습니다: {save_error}")
         else:
             st.success("✅ 총 9개 게임 생성이 완료되었습니다.")
-    else:
-        st.error("❌ 시작 3게임 입력이 제대로 완성되지 않았습니다. 번호를 확인해 주세요.")
