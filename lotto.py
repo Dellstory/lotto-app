@@ -34,28 +34,42 @@ def generate_balanced_random_game():
             return game
 
 # =============================================================
-# [핵심 로직] N개 고정수 기반 연쇄 소거 (메인 + 1차 소거 = 총 2게임)
+# [핵심 로직] N개 고정수 + 미출현 번호 기반 연쇄 소거 세트 생성
 # =============================================================
 def generate_chain_sojeo_2games(base_games, n_value):
     """
-    기반 3게임에서 고정수(N개)를 추출하고, 
-    메인 게임 1개 + 1차 소거 게임 1개로 총 2게임 세트 생성
+    1. 메인 게임: 시작 3게임의 빈도 1위~N위 고정수 + 시작 3게임 미출현 번호에서 나머지 채움
+    2. 1차 소거 게임: 메인 게임에 사용된 번호 제외 후 생성
     """
     selected_set = []
     used_numbers_in_set = set()
     
     all_base_nums = [num for g in base_games for num in g]
+    base_nums_set = set(all_base_nums)
     
-    # 1. 메인 게임 생성 (N개 고정수 추출)
+    # 시작 3게임에 출현하지 않은 번호 풀 (미출현 번호)
+    unappeared_base_pool = list(set(range(1, 46)) - base_nums_set)
+    
+    # 1. 메인 게임 고정수 추출
     fixed_nums = set()
     if n_value > 0 and len(all_base_nums) >= n_value:
         counts = Counter(all_base_nums)
         most_common = [num for num, _ in counts.most_common(n_value)]
         fixed_nums = set(most_common)
     
+    needed = 6 - len(fixed_nums)
+    
+    # 메인 게임 생성 (나머지 칸은 시작 게임 미출현 번호에서 무작위 선택)
+    attempts = 0
     while True:
-        candidate_pool = list(set(range(1, 46)) - fixed_nums)
-        needed = 6 - len(fixed_nums)
+        attempts += 1
+        # 미출현 번호 풀이 충분하고 시도 횟수가 500회 이하인 경우 미출현 번호에서만 선택
+        if len(unappeared_base_pool) >= needed and attempts <= 500:
+            candidate_pool = unappeared_base_pool
+        else:
+            # 보충 필요 시 고정수를 제외한 전체 번호에서 선택
+            candidate_pool = list(set(range(1, 46)) - fixed_nums)
+            
         main_game = sorted(list(fixed_nums) + random.sample(candidate_pool, needed))
         if calculate_stats(main_game)["is_balanced"]:
             selected_set.append(main_game)
@@ -65,7 +79,6 @@ def generate_chain_sojeo_2games(base_games, n_value):
     # 2. 1차 소거 게임 생성 (메인 게임에 사용된 번호 제외)
     while True:
         available_pool = list(set(range(1, 46)) - used_numbers_in_set)
-        # 만약 남은 번호가 6개 미만이면 전체 풀에서 추출
         if len(available_pool) < 6:
             available_pool = list(set(range(1, 46)))
         sojeo1_game = sorted(random.sample(available_pool, 6))
@@ -85,10 +98,8 @@ def generate_unused_bonus_game(previous_9_games):
     
     while True:
         if len(unused_nums) >= 6:
-            # 미출현 번호 중 6개 무작위 선택
             candidate = sorted(random.sample(unused_nums, 6))
         else:
-            # 미출현 번호가 6개 미만이면 남은 번호 모두 + 부족한 수 전체 번호에서 추가
             needed = 6 - len(unused_nums)
             pool_rest = list(set(range(1, 46)) - set(unused_nums))
             candidate = sorted(unused_nums + random.sample(pool_rest, needed))
